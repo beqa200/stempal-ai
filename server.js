@@ -1,7 +1,9 @@
 const fs = require("fs").promises;
 const express = require("express");
 const mongoose = require("mongoose");
+const cors = require("cors");
 const app = express();
+app.use(cors());
 
 app.use(express.json());
 
@@ -206,6 +208,10 @@ app.get("/summary/:chapter/:subchapter", async (req, res) => {
     console.error("Error in generating or retrieving summary:", error);
     res.status(500).send("Error in generating or retrieving summary");
   }
+});
+
+app.get("/table-of-contents", async (req, res) => {
+  res.send(bookContent);
 });
 
 app.put("/summary/:chapter/:subchapter", async (req, res) => {
