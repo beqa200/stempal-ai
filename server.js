@@ -1,12 +1,34 @@
 const fs = require("fs").promises;
 const express = require("express");
+const mongoose = require("mongoose");
 const app = express();
+
+app.use(express.json());
+
 const port = 3000;
 
 const dotenv = require("dotenv");
 const { OpenAI } = require("openai");
 
 dotenv.config({ path: "./local.env" });
+const DB_URL = process.env.DATABASE_URL;
+try {
+  DB_URL &&
+    mongoose.connect(DB_URL).then((con) => {
+      // console.log(con.connections);
+      console.log("Database connected!");
+    });
+} catch (error) {
+  console.error("Error connecting to database:", error);
+}
+
+const summarySchema = new mongoose.Schema({
+  chapter: String,
+  subchapter: String,
+  summary: String,
+});
+
+const Summary = mongoose.model("Summary", summarySchema);
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -156,8 +178,8 @@ const bookDescription = `"Introduction to Java Programming" offers a comprehensi
 //   console.log("All summaries have been generated and saved.")
 // );
 
-app.get("/summary", async (req, res) => {
-  const { chapter, subchapter } = req.query;
+app.get("/summary/:chapter/:subchapter", async (req, res) => {
+  const { chapter, subchapter } = req.params;
   if (!chapter || !subchapter) {
     return res
       .status(400)
@@ -170,11 +192,44 @@ app.get("/summary", async (req, res) => {
   }
 
   try {
-    const summary = await generateSummary(subchapterTitle, bookDescription);
+    let summary = await Summary.findOne({ chapter, subchapter });
+    if (!summary) {
+      const summaryText = await generateSummary(
+        subchapterTitle,
+        bookDescription
+      );
+      summary = new Summary({ chapter, subchapter, summary: summaryText });
+      await summary.save();
+    }
     res.send(summary);
   } catch (error) {
-    console.error("Error in generating summary:", error);
-    res.status(500).send("Error in generating summary");
+    console.error("Error in generating or retrieving summary:", error);
+    res.status(500).send("Error in generating or retrieving summary");
+  }
+});
+
+app.put("/summary/:chapter/:subchapter", async (req, res) => {
+  const { chapter, subchapter } = req.params;
+  const { summary } = req.body;
+  if (!chapter || !subchapter || !summary) {
+    return res
+      .status(400)
+      .send("Missing required parameters: chapter, subchapter, and summary");
+  }
+
+  try {
+    const updatedSummary = await Summary.findOneAndUpdate(
+      { chapter, subchapter },
+      { summary },
+      { new: true }
+    );
+    if (!updatedSummary) {
+      return res.status(404).send("Summary not found");
+    }
+    res.send(updatedSummary);
+  } catch (error) {
+    console.error("Error in updating summary:", error);
+    res.status(500).send("Error in updating summary");
   }
 });
 
